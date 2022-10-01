@@ -9,29 +9,38 @@ import java.util.Objects;
 
 public class BlockPattern {
 
-    private Block[][][] Pattern;
-    private BlockPattern(){
+    private Block[][][] pattern;
+    private int[] offset;
 
+    private BlockPattern(Block[][][] pattern,int[] offset){
+        this.offset = verify3DCoordinates(offset);
+        this.pattern = pattern;
+    }
+
+    public Block getBlockAt(int[] coords){
+        coords = verify3DCoordinates(coords);
+        return pattern[coords[0]][coords[2]][coords[1]];
     }
 
 
 
     public static class Builder{
-        private String[][] layers;
+        private final String[][] layers;
         private int currentheight = 0;
         private boolean containsSpace = false;
         private HashMap<Character,Block> key;
-        private Block centerBlock;
+        private final Block centerBlock;
         private final int SizeX;
         private final int SizeY;
         private final int SizeZ;
 
-        public Builder(Block centerBlock,int SizeX, int SizeY, int SizeZ){
+        public Builder(Block centerBlock,int[] Size){
+            int[] realSize = verify3DCoordinates(Size);
             this.centerBlock = centerBlock;
-            this.SizeX = SizeX;
-            this.SizeY = SizeY;
-            this.SizeZ = SizeZ;
-            layers = new String[SizeZ][SizeY];
+            this.SizeX = realSize[0];
+            this.SizeY = realSize[1];
+            this.SizeZ = realSize[2];
+            this.layers = new String[SizeZ][SizeY];
 
         }
 
@@ -96,14 +105,63 @@ public class BlockPattern {
         }
 
         public BlockPattern Build(){
+            //corrects empty spaces and checks for entries that are too big.
             if(currentheight!=this.SizeY){
                 this.addLayer(new String[]{});
                 containsSpace = true;
                 this.setKey(this.key);
             }
+            Block[][][] pattern = new Block[SizeX][SizeZ][SizeY];
+            //creates a serialized version of the layers;
+            StringBuilder serializedpatternBuilder = new StringBuilder();
+            for (String[] layer: layers) {
+                for (String row: layer) {
+                    serializedpatternBuilder.append(row);
+                }
+            }
+            String serializedPattern = serializedpatternBuilder.toString();
+            int[] currentpos = new int[3];
+            int[] offset = new int[3];
+            //fills in the pattern variable using provided key.
+            for(char c: serializedPattern.toCharArray()){
 
-            return new BlockPattern();
+                pattern[currentpos[0]][currentpos[1]][currentpos[2]] = this.key.get(c);
+                if(this.key.get(c)==this.centerBlock){
+                    offset = currentpos;
+                }
+
+                currentpos[0]++;
+                if(currentpos[0]>=SizeX) {
+                    currentpos[1]++;
+                    currentpos[0]=0;
+                }
+                if(currentpos[1]>=SizeZ) {
+                    currentpos[2]++;
+                    currentpos[1]=0;
+                }
+            }
+            return new BlockPattern(pattern,offset);
 
         }
+    }
+
+    public static int[] verify3DCoordinates(int[] coords){
+        int[] verifiedCoords = new int[3];
+        if(coords.length>3)
+            throw new IndexOutOfBoundsException("Size must have 3 values");
+        else if (coords.length<3) {
+            int llength = 0;
+            for (int i: coords) {
+                verifiedCoords[llength] = i;
+                llength++;
+            }
+            while (llength<3){
+                verifiedCoords[llength] = 0;
+                llength++;
+            }
+        }else{
+            verifiedCoords = coords;
+        }
+        return verifiedCoords;
     }
 }
