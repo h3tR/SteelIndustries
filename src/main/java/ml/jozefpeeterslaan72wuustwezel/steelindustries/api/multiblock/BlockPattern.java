@@ -1,46 +1,96 @@
 package ml.jozefpeeterslaan72wuustwezel.steelindustries.api.multiblock;
 
 
+import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DirectionProperty;
 
 import java.util.HashMap;
 import java.util.Objects;
 
+
 public class BlockPattern {
 
-    private Block[][][] pattern;
-    private int[] offset;
+    public final Block[][][] pattern;
+    public final Vec3i offset;
+    public final Block centerBlock;
 
-    private BlockPattern(Block[][][] pattern, int[] offset) {
-        this.offset = verify3DCoordinates(offset);
+    private BlockPattern(Block[][][] pattern, Vec3i offset, Block centerBlock) {
+        this.offset = offset;
         this.pattern = pattern;
+        this.centerBlock = centerBlock;
     }
 
-    public static int[] verify3DCoordinates(int[] coords) {
-        int[] verifiedCoords = new int[3];
-        if (coords.length > 3)
-            throw new IndexOutOfBoundsException("Size must have 3 values");
-        else if (coords.length < 3) {
-            int llength = 0;
-            for (int i : coords) {
-                verifiedCoords[llength] = i;
-                llength++;
+    public boolean match(Level level, BlockPos pos){
+        DirectionProperty testProperty = null;
+        if(level.getBlockState(pos).getBlock()!=this.centerBlock)
+            return false;
+        if(level.getBlockState(pos).hasProperty(BlockStateProperties.HORIZONTAL_FACING))
+            testProperty = BlockStateProperties.HORIZONTAL_FACING;
+      /*  else if(level.getBlockState(pos).hasProperty(BlockStateProperties.FACING))
+            testProperty = BlockStateProperties.FACING;*/
+        //TODO add support for vertical facing as well
+        boolean outcome = false;
+        if(testProperty!=null){
+            int k =0;
+            for (Block[][] x: this.pattern) {
+                int j =0;
+                for(Block[] z: x){
+                    int i =0;
+                    for (Block y: z){
+                        HorizontaldirectionCoordinateHelper helper = new HorizontaldirectionCoordinateHelper(level.getBlockState(pos).getValue(testProperty));
+                        Vec3i reqpos = helper.getDirectionalCoordinates(new Vec3i(k,i,j).offset(this.offset.multiply(-1)));
+
+                        if(level.getBlockState(pos.offset(reqpos)).getBlock() != y){
+                            LogUtils.getLogger().debug(level.getBlockState(pos.offset(reqpos)).getBlock().toString());
+                            LogUtils.getLogger().debug("test: "+y.toString());
+                            return false;}
+                        i++;
+                    }
+                    j++;
+                }
+                k++;
             }
-            while (llength < 3) {
-                verifiedCoords[llength] = 0;
-                llength++;
+            return true;
+        }else{
+            Direction[] dirPossibilities = {Direction.NORTH,Direction.SOUTH,Direction.WEST,Direction.EAST};
+            for (Direction d: dirPossibilities ) {
+                int k =0;
+                boolean localoutcome = true;
+                for (Block[][] x: this.pattern) {
+                    int j =0;
+                    for(Block[] z: x){
+                        int i =0;
+                        for (Block y: z){
+                            HorizontaldirectionCoordinateHelper helper = new HorizontaldirectionCoordinateHelper(d);
+                            Vec3i reqpos = helper.getDirectionalCoordinates(new Vec3i(k,i,j).offset(this.offset.multiply(-1)));
+                            if(!level.getBlockState(pos.offset(reqpos)).getBlock().equals(y)) {
+                                localoutcome = false;
+                                break;
+                            }
+                            i++;
+                        }
+                        if(!localoutcome)
+                            break;
+                        j++;
+                    }
+                    if(!localoutcome)
+                        break;
+                    k++;
+                }
+                if(localoutcome){
+                    return true;
+                }
             }
-        } else {
-            verifiedCoords = coords;
         }
-        return verifiedCoords;
-    }
 
-    public Block getBlockAt(BlockPos coords) {
-        return pattern[coords.getX()-this.offset[0]][coords.getZ()-this.offset[2]][coords.getY()-this.offset[1]];
+        return outcome;
     }
 
     public static class Builder {
@@ -139,13 +189,16 @@ public class BlockPattern {
             }
             String serializedPattern = serializedpatternBuilder.toString();
             int[] currentpos = new int[3];
-            int[] offset = new int[3];
+            Vec3i offset = Vec3i.ZERO;
             //fills in the pattern variable using provided key.
             for (char c : serializedPattern.toCharArray()) {
 
                 pattern[currentpos[0]][currentpos[1]][currentpos[2]] = this.key.get(c);
                 if (this.key.get(c) == this.centerBlock) {
-                    offset = currentpos;
+
+
+                    offset =  new Vec3i(currentpos[0],currentpos[1],currentpos[2]);
+                    LogUtils.getLogger().debug(offset.toShortString());
                 }
 
                 currentpos[0]++;
@@ -158,7 +211,9 @@ public class BlockPattern {
                     currentpos[1] = 0;
                 }
             }
-            return new BlockPattern(pattern, offset);
+            LogUtils.getLogger().debug(String.valueOf(containsSpace));
+
+            return new BlockPattern(pattern,offset,this.centerBlock);
 
         }
     }
